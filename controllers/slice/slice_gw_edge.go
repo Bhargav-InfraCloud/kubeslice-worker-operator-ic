@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 
+	hubv1alpha1 "github.com/kubeslice/apis/pkg/controller/v1alpha1"
 	"github.com/kubeslice/slicegw-edge/pkg/edgeservice"
 	kubeslicev1beta1 "github.com/kubeslice/worker-operator/api/v1beta1"
 	"github.com/kubeslice/worker-operator/controllers"
@@ -121,14 +122,40 @@ func getClusterProviderID(ctx context.Context, c client.Client) (string, error) 
 	return clusterInfo.ClusterProperty.GeoLocation.CloudProvider, nil
 }
 
+func listCluster(ctx context.Context, c HubClientProvider) ([]hubv1alpha1.Cluster, error) {
+	clusters := &hubv1alpha1.ClusterList{}
+	err := c.List(ctx, clusters)
+	if err != nil {
+		// Request object not found, could have been deleted after reconcile request.
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	return clusters.Items, nil
+}
+
 func (r *SliceReconciler) createSliceGatewayEdgeService(ctx context.Context, slice *kubeslicev1beta1.Slice, portmap *map[string]int32) error {
 	log := r.Log.WithValues("slice", slice.Name)
 	svc := serviceForSliceGatewayEdge(slice, slice.Name, "svc-"+slice.Name+"-gw-edge", portmap)
 	gwProto := slice.Status.SliceConfig.SliceGatewayProtocol
 
+	cluster, err := listCluster(ctx, r.HubClient)
+	if err != nil {
+		log.Info("Luffy listCluster failed", "cluster", cluster, "error", err)
+
+		return err
+	}
+
+	log.Info("Luffy fetched cluster", "cluster", cluster)
+
 	// Note: Special treatment for AWS EKS clusters. The NLB is not provisioned unless we add AWS specific annotations
 	// to the service. This is needed only for EKS.
 	if clusterProvider, _ := getClusterProviderID(ctx, r.Client); clusterProvider == "aws" && gwProto == "UDP" {
+		log.Info("Luffy getClusterProviderID entered", "clusterProvider", clusterProvider, "gwProto", gwProto)
+
 		if svc.ObjectMeta.Annotations == nil {
 			svc.ObjectMeta.Annotations = make(map[string]string)
 		}
@@ -139,7 +166,7 @@ func (r *SliceReconciler) createSliceGatewayEdgeService(ctx context.Context, sli
 
 	ctrl.SetControllerReference(slice, svc, r.Scheme)
 
-	err := r.Create(ctx, svc)
+	err = r.Create(ctx, svc)
 	if err != nil {
 		log.Error(err, "Failed to create slice gateway edge service", "Name", svc.Name)
 		return err
@@ -177,9 +204,13 @@ func (r *SliceReconciler) reconcileSliceGatewayEdgeService(ctx context.Context, 
 		return ctrl.Result{}, err, true
 	}
 
+	log.Info("Nami, reconcileSliceGatewayEdgeService, past fetching sliceGw services", "sliceGwSvcList", sliceGwSvcList)
+
 	if len(sliceGwSvcList.Items) == 0 {
 		return ctrl.Result{}, nil, false
 	}
+
+	log.Info("Nami, reconcileSliceGatewayEdgeService, has sliceGw services")
 
 	// Build portmap
 	portmap := make(map[string]int32)
@@ -194,22 +225,37 @@ func (r *SliceReconciler) reconcileSliceGatewayEdgeService(ctx context.Context, 
 		if apierrors.IsNotFound(err) {
 			err := r.createSliceGatewayEdgeService(ctx, slice, &portmap)
 			if err != nil {
+				log.Info("Nami, first createSliceGatewayEdgeService error", "error", err)
+
 				return ctrl.Result{}, err, true
 			}
+
+			log.Info("Nami, reconcileSliceGatewayEdgeService, past creating SGE services inside")
+
 			return ctrl.Result{Requeue: true}, nil, true
 		}
+
+		log.Info("Nami, getSliceGatewayEdgeServices error not IsNotFound", "error", err)
 
 		return ctrl.Result{}, err, true
 	}
 
+	log.Info("Nami, reconcileSliceGatewayEdgeService, past fetching SGE services")
+
 	if gwEdgeSvc == nil || len(gwEdgeSvc.Items) == 0 {
 		err := r.createSliceGatewayEdgeService(ctx, slice, &portmap)
 		if err != nil {
+			log.Info("Nami, second createSliceGatewayEdgeService error", "error", err)
+
 			return ctrl.Result{}, err, true
 		}
 
+		log.Info("Nami, second createSliceGatewayEdgeService no error")
+
 		return ctrl.Result{Requeue: true}, nil, true
 	}
+
+	log.Info("Nami, reconcileSliceGatewayEdgeService, past creating SGE services outside")
 
 	// Check if an update is needed.
 	// An update is needed if there is a new slice gw pair added or an old one deleted.
@@ -222,6 +268,8 @@ func (r *SliceReconciler) reconcileSliceGatewayEdgeService(ctx context.Context, 
 			return ctrl.Result{}, err, true
 		}
 	}
+
+	log.Info("Nami, reconcileSliceGatewayEdgeService, past port check for SGE services")
 
 	return ctrl.Result{}, nil, false
 }
@@ -434,9 +482,15 @@ func (r *SliceReconciler) reconcileSliceGatewayEdgeDeployment(ctx context.Contex
 }
 
 func (r *SliceReconciler) ReconcileSliceGwEdge(ctx context.Context, slice *kubeslicev1beta1.Slice) (ctrl.Result, error, bool) {
+	r.Log.Info("Zoro, Reconciling slice gateway edge",
+		"sliceGatewayServiceType", slice.Status.SliceConfig.SliceGatewayServiceType,
+		"ENABLE_GW_LB_EDGE", os.Getenv("ENABLE_GW_LB_EDGE"),
+	)
 	if slice.Status.SliceConfig.SliceGatewayServiceType != "LoadBalancer" && os.Getenv("ENABLE_GW_LB_EDGE") == "" {
 		return ctrl.Result{}, nil, false
 	}
+
+	r.Log.Info("Zoro, past LB check")
 
 	// There would be one slice gateway edge deployment that would handle traffic for all the
 	// cluster pairs of a slice. It is only created on clusters that are marked to be VPN servers.
@@ -451,12 +505,16 @@ func (r *SliceReconciler) ReconcileSliceGwEdge(ctx context.Context, slice *kubes
 		return res, nil, true
 	}
 
+	r.Log.Info("Zoro, past reconciling SGE deployment")
+
 	// The edge needs to know the mapping of port numbers to the clusterIP of the VPN services. It needs this
 	// info to set up the NATing rules.
 	err = r.syncSliceGwServiceMap(ctx, slice)
 	if err != nil {
 		return ctrl.Result{}, err, true
 	}
+
+	r.Log.Info("Zoro, past syncing SG service map")
 
 	return r.reconcileSliceGatewayEdgeService(ctx, slice)
 }

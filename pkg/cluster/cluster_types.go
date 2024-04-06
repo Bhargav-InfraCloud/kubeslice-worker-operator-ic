@@ -35,6 +35,8 @@ type ClusterInfo struct {
 type ClusterProperty struct {
 	//GeoLocation contains information regarding Geographical Location of the Cluster
 	GeoLocation GeoLocation `json:"geoLocation,omitempty"`
+	// SliceGatewayEdge's external loadbalancer's annotations
+	ExternalLoadbalancerAnnotations map[string]string `json:"externalLoadbalancerAnnotations"`
 }
 
 // GeoLocation defines the field of ClusterSpec

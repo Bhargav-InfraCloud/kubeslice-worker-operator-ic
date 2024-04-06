@@ -25,6 +25,8 @@ import (
 	"github.com/kubeslice/worker-operator/pkg/gatewayedge"
 	"github.com/kubeslice/worker-operator/pkg/netop"
 	"github.com/kubeslice/worker-operator/pkg/router"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // NetOpPod contains details of NetOp Pod running in the cluster
@@ -37,6 +39,8 @@ type NetOpPod struct {
 type HubClientProvider interface {
 	UpdateAppPodsList(ctx context.Context, sliceConfigName string, appPods []kubeslicev1beta1.AppPod) error
 	UpdateAppNamespaces(ctx context.Context, sliceConfigName string, onboardedNamespaces []string) error
+	// TODO :: Bhargav :: Move it to somewhere else
+	List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
 }
 
 type WorkerRouterClientProvider interface {

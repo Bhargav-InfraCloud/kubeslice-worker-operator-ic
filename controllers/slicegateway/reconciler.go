@@ -145,6 +145,7 @@ func (r *SliceGwReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	if isServer(sliceGw) {
+		log.Info("Usopp, isServer")
 		res, err, requeue := r.ReconcileGatewayDeployments(ctx, sliceGw)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -168,6 +169,7 @@ func (r *SliceGwReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	if isClient(sliceGw) {
+		log.Info("Usopp, isClient")
 		// client can be deployed only if remoteNodeIp,SliceGatewayRemoteNodePort abd SliceGatewayRemoteGatewayID is present
 		if !canDeployGw(sliceGw) {
 			// no need to deploy gateway deployment or service

@@ -1252,10 +1252,15 @@ func (r *SliceGwReconciler) ReconcileGatewayServices(ctx context.Context, sliceG
 
 	sliceGwName := sliceGw.Name
 
+	log.Info("Usopp ReconcileGatewayServices")
+
 	for gwInstance := 0; gwInstance < r.NumberOfGateways; gwInstance++ {
 		if !gwServiceIsPresent(sliceGwName, gwInstance, gwServices) {
 			svcName := "svc-" + sliceGwName + "-" + fmt.Sprint(gwInstance) + "-" + "0"
 			depName := sliceGwName + "-" + fmt.Sprint(gwInstance) + "-" + "0"
+
+			log.Info("Usopp ReconcileGatewayServices loop", "depName", depName)
+
 			_, err, _ := r.handleSliceGwSvcCreation(ctx, sliceGw, svcName, depName)
 			if err != nil {
 				return ctrl.Result{}, err, true
